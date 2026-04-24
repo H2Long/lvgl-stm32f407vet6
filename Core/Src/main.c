@@ -18,17 +18,18 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-//#include "cmsis_os.h"
 #include "tim.h"
 #include "gpio.h"
 #include "fsmc.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "lvgl.h"                // 它为整个LVGL提供了更完整的头文件引用
-#include "lv_port_disp.h"        // LVGL的显示支持
-//#include "lv_port_indev.h"       // LVGL的触屏支持 (暂不使用)
+#include "lvgl.h"
+#include "lv_port_disp.h"
+#include "lv_port_indev.h"
 #include "lcd.h"
+#include "touch.h"
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -47,21 +48,35 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-
 /* USER CODE BEGIN PV */
-
+static uint32_t btn_click_count = 0;  // 按钮点击计数
+static lv_obj_t * coord_label = NULL; // 坐标显示标签
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
-void MX_FREERTOS_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-extern void MX_FREERTOS_Init(void);
+
+/* 按钮事件回调函数 */
+static void btn_event_cb(lv_event_t * e)
+{
+    lv_obj_t * btn = lv_event_get_target(e);  // 获取触发事件的按钮
+    lv_obj_t * label = lv_obj_get_child(btn, 0);  // 获取按钮的标签
+
+    if(lv_event_get_code(e) == LV_EVENT_CLICKED) {
+        btn_click_count++;
+        // 更新标签文本显示点击次数
+        static char buf[32];
+        snprintf(buf, sizeof(buf), "Clicked: %lu", (unsigned long)btn_click_count);
+        lv_label_set_text(label, buf);
+    }
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -81,6 +96,7 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
+
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -96,69 +112,65 @@ int main(void)
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
 
-  LCD_Init();                             // ✅ FSMC初始化后再初始化LCD
-  lv_init();                               // LVGL 初始化
+  LCD_Init();                             // FSMC初始化后再初始化LCD
+  lv_init();                              // LVGL 初始化
   lv_port_disp_init();                    // 注册LVGL的显示任务
-  lv_extra_init();                         // 初始化LVGL额外组件
-  lv_theme_default_init(lv_disp_get_default(), lv_color_make(0x20, 0x25, 0x2E), lv_color_make(0xFF, 0x44, 0x00), true, LV_FONT_DEFAULT);  // 初始化默认主题
+  lv_port_indev_init();                   // 注册LVGL的触摸输入设备
   HAL_TIM_Base_Start_IT(&htim6);          // 启动定时器为LVGL提供心跳
 
+  // 等待触摸屏稳定
   HAL_Delay(500);
-  LCD_Clear(BLACK);
-  HAL_Delay(500);
-  LCD_Clear(RED);
-  HAL_Delay(100);
-  LCD_Clear(BLUE);
-  HAL_Delay(200);
   LCD_Clear(WHITE);
-  HAL_Delay(100);
 
-  // 按钮
-  lv_obj_t *myBtn = lv_btn_create(lv_scr_act());                               // 创建按钮; 父对象：当前活动屏幕
-  lv_obj_set_pos(myBtn, 10, 10);                                               // 设置坐标
-  lv_obj_set_size(myBtn, 120, 50);                                             // 设置大小
+  /* 创建测试按钮 */
+  lv_obj_t *myBtn = lv_btn_create(lv_scr_act());           // 创建按钮
+  lv_obj_set_pos(myBtn, 80, 80);                            // 设置坐标
+  lv_obj_set_size(myBtn, 160, 60);                         // 设置大小
+  lv_obj_add_event_cb(myBtn, btn_event_cb, LV_EVENT_ALL, NULL);  // 添加事件回调
 
   // 按钮上的文本
-  lv_obj_t *label_btn = lv_label_create(myBtn);                                // 创建文本标签，父对象：上面的btn按钮
-  lv_obj_align(label_btn, LV_ALIGN_CENTER, 0, 0);                              // 对齐于：父对象
-  lv_label_set_text(label_btn, "Test");                                        // 设置标签的文本
+  lv_obj_t *label_btn = lv_label_create(myBtn);
+  lv_label_set_text(label_btn, "Click Me!");
+  lv_obj_center(label_btn);
 
-  // 独立的标签
-  lv_obj_t *myLabel = lv_label_create(lv_scr_act());                           // 创建文本标签; 父对象：当前活动屏幕
-  lv_label_set_text(myLabel, "Hello world!");                                  // 设置标签的文本
-  lv_obj_align(myLabel, LV_ALIGN_CENTER, 0, 0);                                // 对齐于：父对象
-  lv_obj_align_to(myBtn, myLabel, LV_ALIGN_OUT_TOP_MID, 0, -20);               // 对齐于：某对象
+  // 信息标签
+  lv_obj_t *infoLabel = lv_label_create(lv_scr_act());
+  lv_label_set_text(infoLabel, "Touch button to test!");
+  lv_obj_align(infoLabel, LV_ALIGN_CENTER, 0, 0);
+
+  // 触摸坐标显示标签
+  coord_label = lv_label_create(lv_scr_act());
+  lv_label_set_text(coord_label, "Touch: ---");
+  lv_obj_align(coord_label, LV_ALIGN_BOTTOM_MID, 0, -10);
+
   /* USER CODE END 2 */
-
-  /* 暂时禁用 FreeRTOS，裸机运行 LVGL */
-  // /* Init scheduler */
-  // osKernelInitialize();  /* Call init function for freertos objects (in cmsis_os2.c) */
-  // MX_FREERTOS_Init();
-  //
-  // /* Start scheduler */
-  // osKernelStart();
-  //
-  // /* We should never get here as control is now taken by the scheduler */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    HAL_Delay(1 - 1);
-
-    /** 每5ms 检测一次LVGL任务 **/
-    static uint8_t msLVGL = 0;
-    if (msLVGL++ >= 5)
-    {
-      lv_timer_handler();
-      msLVGL = 0;
-    }
-
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    lv_timer_handler();  // 处理LVGL任务
+
+    // 更新触摸坐标显示 (调试用)
+    if(coord_label != NULL) {
+        static char coord_buf[32];
+        uint16_t raw_x = tp_dev.x[0];
+        uint16_t raw_y = tp_dev.y[0];
+        if(tp_dev.sta & TP_PRES_DOWN) {
+            snprintf(coord_buf, sizeof(coord_buf), "Touch: X=%d Y=%d", raw_x, raw_y);
+        } else {
+            snprintf(coord_buf, sizeof(coord_buf), "Touch: ---");
+        }
+        lv_label_set_text(coord_label, coord_buf);
+    }
+
+    HAL_Delay(10);        // 10ms延时
+    /* USER CODE END 3 */
   }
-  /* USER CODE END 3 */
+  /* USER CODE END WHILE */
 }
 
 /**
@@ -229,9 +241,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
-  if (htim->Instance == TIM6)                 // 判断是哪个TIM产生的中断
+  if (htim->Instance == TIM6)
   {
-    lv_tick_inc(1);                         // 给LVGL提供1ms的心跳时期
+    lv_tick_inc(1);  // 给LVGL提供1ms的心跳
   }
   /* USER CODE END Callback 1 */
 }

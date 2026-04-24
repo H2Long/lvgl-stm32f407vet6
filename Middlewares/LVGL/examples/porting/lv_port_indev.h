@@ -1,11 +1,11 @@
 
 /**
- * @file lv_port_indev_templ.h
+ * @file lv_port_indev.h
  *
+ * LVGL 输入设备端口头文件
  */
 
-/*Copy this file as "lv_port_indev.h" and set this value to "1" to enable content*/
-#if 0
+#if 1
 
 #ifndef LV_PORT_INDEV_TEMPL_H
 #define LV_PORT_INDEV_TEMPL_H
